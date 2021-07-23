@@ -5,11 +5,19 @@ module Data.SimpleJson.Parser
   ) where
 
 import           Control.Applicative ((<|>))
-import           Control.Monad.State (MonadState (get, put), MonadTrans (lift),
-                                      StateT (..), evalStateT, gets)
+import           Control.Monad.State (MonadState (get, put), StateT (..),
+                                      evalStateT, gets)
+import           Control.Monad.Trans (lift)
 import           Data.Char           (isDigit, isSpace)
 
 import           Data.SimpleJson     (Json (..), isToken)
+
+unfoldStateT :: StateT s Maybe a -> StateT s Maybe [a]
+unfoldStateT f = do
+  s <- get
+  case runStateT f s of
+    Just (a, s') -> put s' >> (a :) <$> unfoldStateT f
+    Nothing      -> return []
 
 type JsonParser a = StateT String Maybe a
 
@@ -89,27 +97,15 @@ jsonArray :: JsonParser Json
 jsonArray = JsonArray <$> (char' '[' *> elements <* char' ']')
     where
       elements = do
-        s <- get
-        case runStateT jsonElement s of
-          Just (j, s') -> put s' >> (j :) <$> elements'
-          Nothing      -> return []
-      elements' = do
-        s <- get
-        case runStateT (char' ',' *> jsonElement) s of
-          Just (j, s') -> put s' >> (j :) <$> elements'
-          Nothing      -> return []
+        j  <- jsonElement
+        js <- unfoldStateT (char' ',' *> jsonElement)
+        return (j : js)
 
 jsonObject :: JsonParser Json
 jsonObject = JsonObject <$> (char' '{' *> elements <* char' '}')
     where
       string = char' '"' *> readUntil (== '"') <* char '"'
       elements = do
-        s <- get
-        case runStateT ((,) <$> string <*> (char' ':' *> jsonElement)) s of
-          Just (j, s') -> put s' >> (j :) <$> elements'
-          Nothing      -> return []
-      elements' = do
-        s <- get
-        case runStateT ((,) <$> (char' ',' *> string) <*> (char ':' *> jsonElement)) s of
-          Just (j, s') -> put s' >> (j :) <$> elements'
-          Nothing      -> return []
+        j  <- (,) <$> string <*> (char' ':' *> jsonElement)
+        js <- unfoldStateT ((,) <$> (char' ',' *> string) <*> (char ':' *> jsonElement))
+        return (j : js)
