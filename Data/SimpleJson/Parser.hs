@@ -22,7 +22,7 @@ unfoldStateT f = do
 type JsonParser a = StateT String Maybe a
 
 json :: JsonParser Json
-json = (jsonObject <* skip <* eos) <|> (jsonArray <* skip <* eos) <|> lift Nothing
+json = skip *> (jsonObject <|> jsonArray) <* skip <* eos
 
 parse :: JsonParser Json -> String -> Maybe Json
 parse = evalStateT
@@ -50,34 +50,26 @@ readUntil p = do
 
 jsonElement :: JsonParser Json
 jsonElement =
-  jsonObject
-  <|> jsonArray
-  <|> jsonString
-  <|> jsonNumber
-  <|> jsonBool
-  <|> jsonNull
-  <|> lift Nothing
+  jsonObject <|> jsonArray <|> jsonString <|> jsonNumber <|> jsonBool <|> jsonNull
 
 jsonString :: JsonParser Json
-jsonString = JsonString <$> (skip *> char '"' *> readUntil (== '"') <* char '"')
+jsonString = JsonString <$> (char '"' *> readUntil (== '"') <* char '"')
 
 jsonNumber :: JsonParser Json
 jsonNumber = JsonNumber <$> (float <|> integer)
   where
     nonEmpty p = do
       s <- p
-      if null s
-         then lift Nothing
-         else return s
+      if null s then lift Nothing else return s
     float = do
-      decimal  <- skip     *> nonEmpty (readUntil (not . isDigit))
+      decimal  <-             nonEmpty (readUntil (not . isDigit))
       fraction <- char '.' *> nonEmpty (readUntil (not . isDigit))
       return $ decimal <> "." <> fraction
-    integer = skip *> nonEmpty (readUntil (not . isDigit))
+    integer = nonEmpty (readUntil (not . isDigit))
 
 jsonBool :: JsonParser Json
 jsonBool = do
-  s <- skip *> readUntil ((||) <$> isSpace <*> isToken)
+  s <- readUntil ((||) <$> isSpace <*> isToken)
   case s of
     "true"  -> return $ JsonBool True
     "false" -> return $ JsonBool False
@@ -85,24 +77,25 @@ jsonBool = do
 
 jsonNull :: JsonParser Json
 jsonNull = do
-  s <- skip *> readUntil ((||) <$> isSpace <*> isToken)
+  s <- readUntil ((||) <$> isSpace <*> isToken)
   if s == "null"
      then return JsonNull
      else lift Nothing
 
 jsonArray :: JsonParser Json
-jsonArray = JsonArray <$> (skip *> char '[' *> elements <* skip <* char ']')
+jsonArray = JsonArray <$> (char '[' *> skip *> elements <* skip <* char ']')
     where
       elements = do
         j  <- jsonElement
-        js <- unfoldStateT (skip *> char ',' *> jsonElement)
+        js <- unfoldStateT (skip *> char ',' *> skip *> jsonElement)
         return (j : js)
 
 jsonObject :: JsonParser Json
-jsonObject = JsonObject <$> (skip *> char '{' *> elements <* skip <* char '}')
+jsonObject = JsonObject <$> (char '{' *> skip *> elements <* skip <* char '}')
     where
-      string   = skip *> char '"' *> readUntil (== '"') <* char '"'
+      string   = char '"' *> readUntil (== '"') <* char '"'
+      char' c  = skip *> char c <* skip
       elements = do
-        j  <- (,) <$> string <*> (skip *> char ':' *> jsonElement)
-        js <- unfoldStateT ((,) <$> (skip *> char ',' *> string) <*> (char ':' *> jsonElement))
+        j  <- (,) <$> string <*> (char' ':' *> jsonElement)
+        js <- unfoldStateT ((,) <$> (char' ',' *> string) <*> (char' ':' *> jsonElement))
         return (j : js)
