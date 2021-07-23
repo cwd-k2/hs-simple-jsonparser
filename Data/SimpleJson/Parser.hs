@@ -42,9 +42,6 @@ char c = StateT $ \str ->
      then Just ((), tail str)
      else Nothing
 
-char' :: Char -> JsonParser ()
-char' c = skip *> char c
-
 readUntil :: (Char -> Bool) -> JsonParser String
 readUntil p = do
   (str, rest) <- gets $ break p
@@ -62,7 +59,7 @@ jsonElement =
   <|> lift Nothing
 
 jsonString :: JsonParser Json
-jsonString = JsonString <$> (char' '"' *> readUntil (== '"') <* char '"')
+jsonString = JsonString <$> (skip *> char '"' *> readUntil (== '"') <* char '"')
 
 jsonNumber :: JsonParser Json
 jsonNumber = JsonNumber <$> (float <|> integer)
@@ -94,18 +91,18 @@ jsonNull = do
      else lift Nothing
 
 jsonArray :: JsonParser Json
-jsonArray = JsonArray <$> (char' '[' *> elements <* char' ']')
+jsonArray = JsonArray <$> (skip *> char '[' *> elements <* skip <* char ']')
     where
       elements = do
         j  <- jsonElement
-        js <- unfoldStateT (char' ',' *> jsonElement)
+        js <- unfoldStateT (skip *> char ',' *> jsonElement)
         return (j : js)
 
 jsonObject :: JsonParser Json
-jsonObject = JsonObject <$> (char' '{' *> elements <* char' '}')
+jsonObject = JsonObject <$> (skip *> char '{' *> elements <* skip <* char '}')
     where
-      string = char' '"' *> readUntil (== '"') <* char '"'
+      string   = skip *> char '"' *> readUntil (== '"') <* char '"'
       elements = do
-        j  <- (,) <$> string <*> (char' ':' *> jsonElement)
-        js <- unfoldStateT ((,) <$> (char' ',' *> string) <*> (char ':' *> jsonElement))
+        j  <- (,) <$> string <*> (skip *> char ':' *> jsonElement)
+        js <- unfoldStateT ((,) <$> (skip *> char ',' *> string) <*> (char ':' *> jsonElement))
         return (j : js)
