@@ -3,10 +3,8 @@ module Data.SimpleJson
   , isToken
   ) where
 
-import           Data.Map (Map)
-
 data Json
-  = JsonObject (Map String Json)
+  = JsonObject [(String, Json)]
   | JsonArray [Json]
   | JsonString String
   | JsonNumber String

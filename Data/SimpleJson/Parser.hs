@@ -8,7 +8,6 @@ import           Control.Applicative ((<|>))
 import           Control.Monad.State (MonadState (get, put), MonadTrans (lift),
                                       StateT (..), evalStateT, gets)
 import           Data.Char           (isDigit, isSpace)
-import           Data.Map            (fromList)
 
 import           Data.SimpleJson     (Json (..), isToken)
 
@@ -101,7 +100,7 @@ jsonArray = JsonArray <$> (char' '[' *> elements <* char' ']')
           Nothing      -> return []
 
 jsonObject :: JsonParser Json
-jsonObject = JsonObject . fromList <$> (char' '{' *> elements <* char' '}')
+jsonObject = JsonObject <$> (char' '{' *> elements <* char' '}')
     where
       string = char' '"' *> readUntil (== '"') <* char '"'
       elements = do
